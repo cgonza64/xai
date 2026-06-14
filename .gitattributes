@@ -1,0 +1,2 @@
+ckpts/*.ckpt filter=lfs diff=lfs merge=lfs -text
+ckpts/*.npy filter=lfs diff=lfs merge=lfs -text
