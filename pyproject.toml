@@ -1,0 +1,30 @@
+[project]
+name = "xai"
+version = "0.1.0"
+description = "This project evaluates various model explainability methods applied to a CNN trained for image classification."
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "matplotlib",
+    "numpy",
+    "pandas",
+    "scipy",
+    "statsmodels",
+    "torch>=2.0",
+    "torchvision",
+    "torchinfo",
+    "grad-cam",
+    "captum",
+    "lime",
+    "einops",
+    "tqdm",
+    "jupyter"
+]
+
+[[tool.uv.index]]
+name = "pytorch-cu130"
+url = "https://download.pytorch.org/whl/cu130"
+explicit = true # Ensures this index is only used for specified packages
+
+[tool.uv.sources]
+torch = { index = "pytorch-cu130" }
