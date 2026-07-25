@@ -1,7 +1,7 @@
 from XaiMethodBase import XaiMethodBase
 import matplotlib.pyplot as plt
 from PIL import Image
-from utils import data_transforms, tensor2numpy
+from utils import data_transforms, tensor2image
 from tqdm import tqdm
 import numpy as np
 
@@ -63,7 +63,7 @@ class GradCamXai(XaiMethodBase):
         Visualize the Grad-CAM heatmap on the input image.
         """
         # Visualize
-        inp = tensor2numpy(input_tensor)
+        inp = tensor2image(input_tensor)
         visualization = show_cam_on_image(inp, grayscale_cam, use_rgb=True)
         _, ax = plt.subplots(1, 1)
         ax.imshow(visualization)
@@ -79,10 +79,11 @@ class GradCamXai(XaiMethodBase):
         """
         Convert Grad-CAM heatmaps to pixel importance maps.
         """
-        bs = explanations.shape[0]
-        exp_flat = explanations.reshape(bs, -1)
-        importance_maps = np.argsort(exp_flat)[:, ::-1]
-        return importance_maps, exp_flat
+        # bs = explanations.shape[0]
+        # exp_flat = explanations.reshape(bs, -1)
+        # importance_maps = np.argsort(exp_flat)[:, ::-1]
+        # return importance_maps, exp_flat
+        return explanations  # GradCAM already produces importance mappings that are normalized in [0, 1]
 
 
 if __name__ == "__main__":
@@ -116,13 +117,16 @@ if __name__ == "__main__":
     test_image = "C:/Users/cesar/Su26_Advanced_AppliedML/research_project/custom_animals_dataset/cat/cat_0.jpg"
     img = Image.open(test_image)
     img = data_transforms(img).unsqueeze(0)  # Add batch dimension
-    explanations = grad_cam.explain(img, labels=torch.tensor([3]))  # Assuming label 3 for cat
-    grayscale_cam = explanations[0]
+    explanation = grad_cam.explain(img, labels=torch.tensor([3]))  # Assuming label 3 for cat
+    grayscale_cam = explanation[0]
     grad_cam.visualize(img, grayscale_cam, label[0].item(), save_path='gradcam_cat.png')
 
-    # importance maps
-    importance_maps, exp_flat = grad_cam.importance_maps(explanations)
-    print(type(importance_maps), type(exp_flat))
-    print(importance_maps.shape, exp_flat.shape)
-    print(exp_flat[0][importance_maps[0][:5]])  # Should be in descending order
+    # importance maps and feature rankings
+    importance_maps = grad_cam.importance_maps(explanations)
+    bs = explanations.shape[0]
+    im_flat = importance_maps.reshape(bs, -1)
+    feature_rankings = np.argsort(im_flat)[:, ::-1]
+    print(type(importance_maps), type(feature_rankings))
+    print(importance_maps.shape, feature_rankings.shape)
+    print(im_flat[0][feature_rankings[0][:5]])  # Should be in descending order
 
