@@ -1,13 +1,12 @@
 from XaiMethodBase import XaiMethodBase
 import matplotlib.pyplot as plt
 from PIL import Image
-from utils import data_transforms, tensor2image
+from utils import data_transforms, load_model, tensor2image
 from tqdm import tqdm
 import numpy as np
 
 # Torch
 import torch
-import numpy as np
 import cv2
 from torchvision.datasets import CIFAR10
 from torchvision.models import resnet18
@@ -79,20 +78,12 @@ class GradCamXai(XaiMethodBase):
         """
         Convert Grad-CAM heatmaps to pixel importance maps.
         """
-        # bs = explanations.shape[0]
-        # exp_flat = explanations.reshape(bs, -1)
-        # importance_maps = np.argsort(exp_flat)[:, ::-1]
-        # return importance_maps, exp_flat
         return explanations  # GradCAM already produces importance mappings that are normalized in [0, 1]
 
 
 if __name__ == "__main__":
     # Load a pre-trained model (ResNet18)
-    NUM_CLASSES = 10  # CIFAR-10
-    CKPT = "ckpts/rn18_cifar10.ckpt"
-    model = resnet18(weights=None, num_classes=NUM_CLASSES)  # Assuming CIFAR-10 dataset with 10 classes
-    checkpoint = torch.load(CKPT, map_location="cpu")
-    model.load_state_dict(checkpoint)
+    model = load_model(model_ckpt="ckpts/rn18_cifar10.ckpt")
 
     # Define the target layer for Grad-CAM
     target_layers = [model.layer4[-1]]  # Last layer of the last block in ResNet18
