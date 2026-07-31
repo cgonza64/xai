@@ -1,81 +1,100 @@
 from GradCamXai import GradCamXai
-from utils import load_data_samples, load_model, NUM_CLASSES
+from IntegratedGradientsXai import IntegratedGradientsXai
+from LimeXai import LimeXai
+from utils import load_data_samples, load_model, data_transforms, lime_transforms
+from tqdm import tqdm
+from functools import partial
 import numpy as np
 import os
 import time
+import gc
 import torch
-from torchvision.datasets import CIFAR10
-from torchvision.models import resnet18
-from torch.utils.data import Subset
 
+# Number of explanation collection rounds per XAI method
+# At least 5 for statistical signifance purposes
+NUMBER_OF_ITERATIONS = 5
+
+# Explanation Collection Configurations for each XAI method
 XAI_METHODS = {
-    'GradCAM': GradCamXai,
-    # 'IntegratedGradients': IGXai,
-    # 'LIME': LimeXai
+    'GradCAM': {
+        'ctor': GradCamXai,
+        'batch_size': 128,
+        'data_only': False,
+        'data_transforms': data_transforms
+    },
+    'IntegratedGradients': {
+        'ctor': IntegratedGradientsXai,
+        'batch_size': 2,
+        'data_only': False,
+        'data_transforms': data_transforms
+    },
+    'LIME': {
+        'ctor': LimeXai,
+        'batch_size': 128,
+        'data_only': True,
+        'data_transforms': lime_transforms
+    }
 }
 
-def produce_explanations(model_ckpt="ckpts/rn18_cifar10.ckpt", explanations_path='explanations'):
+def produce_explanations(model_ckpt="ckpts/rn18_cifar10.ckpt", save_path='explanations', n_iter=NUMBER_OF_ITERATIONS):
+    """ TODO: add description. """
     # instantiate model
     model = load_model(model_ckpt=model_ckpt)
 
     # Define the target layer for Grad-CAM
     target_layers = [model.layer4[-1]]  # Last layer of the last block in ResNet18
 
-    # Load the correctly predicted data samples from the CIFAR10 testset
-    dloader = load_data_samples()
-    N = len(dloader.dataset)
-
-    # Produce explanations on the test set
-    all_importance_maps = {n: None for n in XAI_METHODS.keys()}
-    all_explanation_wts = {n: None for n in XAI_METHODS.keys()}
-    all_durations = {n: None for n in XAI_METHODS.keys()}
-    for name, xai_method in XAI_METHODS.items():
+    # Produce explanations for each XAI method
+    for name, config in XAI_METHODS.items():
         print(f"\n--- {name} ---")
-        stats_path = f"{explanations_path}/{name}"
+        stats_path = f"{save_path}/{name}"
         os.makedirs(stats_path, exist_ok=True)
 
-        # Explanation generation duration
-        start = time.time()  
+        # Load the correctly predicted data samples from the CIFAR10 testset
+        bs, data_only, transforms = config['batch_size'], config['data_only'], config['data_transforms']
+        dloader = load_data_samples(batch_size=bs, data_only=data_only, transforms=transforms)
 
-        if name in 'GradCAM':
-            explainer = xai_method(model, target_layers=target_layers)
+        N = len(dloader) if name == "LIME" else len(dloader.dataset)
+
+        # Force tqdm to stop rendering for every LIME explanation
+        disable_progress_bar = True if name == 'LIME' else False
+        tqdm.__init__ = partial(tqdm.__init__, disable=disable_progress_bar)
+
+        if name == 'GradCAM':
+            explainer = config['ctor'](model, target_layers=target_layers)
         else:
-            explainer = xai_method(model)
+            explainer = config['ctor'](model)
 
-        # Generate explanations and extract feature importance mappings
-        explanations = explainer.explain(dloader)
-        time_elapsed = time.time() - start
-        all_durations[name] = time_elapsed
-        print(f"Generated {N} explanations in {time_elapsed // 60:.0f}m {time_elapsed % 60:.0f}s")
+        # Perform multiple executions to determine statistical siginificance
+        for n in range(n_iter):
+            print(f"iteration {n+1}:")
 
-        print("Extracting feature importance mappings...")
-        importance_mappings = explainer.importance_maps(explanations)
-        all_importance_maps[name] = importance_mappings
-        
-        # Save for later processing
-        print("Saving to disk...")
-        np.save(f"{stats_path}/importance_maps.npy", importance_mappings)
-        np.save(f"{stats_path}/duration.npy", time_elapsed)
+            # Explanation generation duration
+            start = time.time()  
 
-    return all_importance_maps, all_explanation_wts
+            # Generate explanations and extract feature importance mappings
+            explanations = explainer.explain(dloader)
+            time_elapsed = time.time() - start
+            print(f"Generated {N} explanations in {time_elapsed // 60:.0f}m {time_elapsed % 60:.0f}s")
 
-def perturbation(model_ckpt="ckpts/rn18_cifar10.ckpt", explanations_path='explanations'):
-    # instantiate model
-    model = load_model(model_ckpt=model_ckpt)
+            print("Extracting feature importance mappings...")
+            explanations = explanations[0] if name == "LIME" else explanations
+            importance_mappings = explainer.importance_maps(explanations)
+            
+            # Save for later processing
+            print("Saving to disk...")
+            np.save(f"{stats_path}/importance_maps_{n+1}.npy", importance_mappings)
+            np.save(f"{stats_path}/duration_{n+1}.npy", time_elapsed)
 
-    # Load the correctly predicted data samples from the CIFAR10 testset
-    dloader = load_data_samples()
-    N = len(dloader.dataset)
+            # Free up RAM/VRAM for next iteration
+            del explanations, importance_mappings
+            gc.collect()
+            torch.cuda.empty_cache()
 
-    # Produce explanations on the test set
-    all_importance_maps = {n: None for n in XAI_METHODS.keys()}
-    all_explanation_wts = {n: None for n in XAI_METHODS.keys()}
-    all_durations = {n: None for n in XAI_METHODS.keys()}
-    for name, xai_method in XAI_METHODS.items():
-        print(f"\n--- {name} ---")
-        stats_path = f"{explanations_path}/{name}"
-        importance_mappings = np.load(f"{stats_path}/importance_mappings.npy")
-        explanation_wts = np.load(f"{stats_path}/explanation_wts.npy")
+        # Free up RAM/VRAM for next method
+        del explainer
+        gc.collect()
+        torch.cuda.empty_cache()
 
 if __name__=='__main__':
     produce_explanations()
