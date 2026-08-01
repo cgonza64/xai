@@ -13,6 +13,7 @@ from explanations import XAI_METHODS, NUMBER_OF_ITERATIONS
 from PIL import Image
 from utils import data_transforms
 
+PERTURBATION_RATIOS = torch.linspace(0,1,11)
 Device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 def create_masks(indices, fraction, H=IMG_SIZE, W=IMG_SIZE):
@@ -101,6 +102,7 @@ def pipeline(model_ckpt,
 
         # Compute scores for each explanation collection iteration
         method_deletion_auc, method_insertion_auc = [], []
+        avg_del_confidence, avg_ins_confidence = [], []
         for i in range(1, NUMBER_OF_ITERATIONS+1):
             importance_maps = np.load(f"{stats_path}/importance_maps_{i}.npy")
 
@@ -145,17 +147,27 @@ def pipeline(model_ckpt,
             method_deletion_auc.append(feat_deletion_auc)
             method_insertion_auc.append(feat_insertion_auc)
 
+            # save average model confidence scores per ratio
+            avg_del_confidence.append(np.mean(feat_del_scores, axis=1))
+            avg_ins_confidence.append(np.mean(feat_ins_scores, axis=1))
+
         # Save all AUC scores for this XAI method
         method_deletion_auc = np.vstack(method_deletion_auc)
         method_insertion_auc = np.vstack(method_insertion_auc)
-        np.save(f"{save_path}/feature_deletion_scores.npy", method_deletion_auc)
-        np.save(f"{save_path}/feature_insertion_scores.npy", method_deletion_auc)
+        np.save(f"{save_path}/feature_deletion_auc.npy", method_deletion_auc)
+        np.save(f"{save_path}/feature_insertion_auc.npy", method_insertion_auc)
 
         # Average per-instance AUC over each iteration before computing total average AUC
         avg_del_scores = np.mean(method_deletion_auc, axis=0)
         print(f"Avg Feature Deletion AUC={np.mean(avg_del_scores):.3f} {chr(177)}{np.std(avg_del_scores):.4f}")
         avg_ins_scores = np.mean(method_insertion_auc, axis=0)
         print(f"Avg Feature Insertion AUC={np.mean(avg_ins_scores):.3f} {chr(177)}{np.std(avg_ins_scores):.4f}")
+
+        # Save average model confidence vs perturbation ratios
+        avg_del_confidence = np.vstack(avg_del_confidence)
+        avg_ins_confidence = np.vstack(avg_ins_confidence)
+        np.save(f"{save_path}/deletion_confidence.npy", avg_del_confidence)
+        np.save(f"{save_path}/insertion_confidence.npy", avg_ins_confidence)
 
 def visualize_perturbations(img, mask, ratio=0.3, mode='deletion'):
     """ Function to visualize example images side-by-side with their perturbed versions. """
@@ -192,7 +204,7 @@ if __name__=='__main__':
 
     # Compute and save the pertubation scores for each XAI method
     pipeline(model_ckpt="ckpts/rn18_cifar10.ckpt",
-             ratios=torch.linspace(0,1,11),
+             ratios=PERTURBATION_RATIOS,
              data_idx="./ckpts/correct_preds_indices.npy")
 
     # # Visualize a sample image along with its perturbed version
