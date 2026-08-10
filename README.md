@@ -11,6 +11,7 @@ This project evaluates explanation fidelity for GradCAM, Integrated Gradients, a
 - [Training the ResNet-18 Model](#training-the-resnet-18-model)
 - [Collecting the Explanations](#collecting-the-explanations)
 - [Perturbation Pipeline](#perturbation-pipeline)
+- [Metrics](#metrics)
 
 ---
 
