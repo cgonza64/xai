@@ -11,7 +11,7 @@ import gc
 import torch
 
 # Number of explanation collection rounds per XAI method
-# At least 5 for statistical signifance purposes
+# At least 5 for statistical significance purposes
 NUMBER_OF_ITERATIONS = 5
 
 # Explanation Collection Configurations for each XAI method
@@ -36,8 +36,16 @@ XAI_METHODS = {
     }
 }
 
-def produce_explanations(model_ckpt="ckpts/rn18_cifar10.ckpt", save_path='explanations', n_iter=NUMBER_OF_ITERATIONS):
-    """ TODO: add description. """
+def produce_explanations(model_ckpt="ckpts/rn18_cifar10.ckpt", save_path='./explanations', n_iter=NUMBER_OF_ITERATIONS):
+    """
+    Generates explanations for the correctly predicted samples from the CIFAR-10 testset using multiple XAI methods. 
+    The explanations are saved to disk for later processing.
+
+    Args:
+        model_ckpt (str): Path to the pre-trained ResNet-18 model checkpoint.
+        save_path (str): Directory where the generated explanations will be saved.
+        n_iter (int): Number of iterations to run for each XAI method.
+    """
     # instantiate model
     model = load_model(model_ckpt=model_ckpt)
 
@@ -53,7 +61,6 @@ def produce_explanations(model_ckpt="ckpts/rn18_cifar10.ckpt", save_path='explan
         # Load the correctly predicted data samples from the CIFAR10 testset
         bs, data_only, transforms = config['batch_size'], config['data_only'], config['data_transforms']
         dloader = load_data_samples(batch_size=bs, data_only=data_only, transforms=transforms)
-
         N = len(dloader) if name == "LIME" else len(dloader.dataset)
 
         # Force tqdm to stop rendering for every LIME explanation

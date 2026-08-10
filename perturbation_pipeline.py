@@ -10,8 +10,6 @@ import os
 from utils import IMG_SIZE, CIFAR10_MEAN
 from utils import load_data_samples, load_model, tensor2image
 from explanations import XAI_METHODS, NUMBER_OF_ITERATIONS
-from PIL import Image
-from utils import data_transforms
 
 PERTURBATION_RATIOS = torch.linspace(0,1,11)
 Device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -20,6 +18,14 @@ def create_masks(indices, fraction, H=IMG_SIZE, W=IMG_SIZE):
     """
     Helper function to mask a fraction of the important input features 
     as determined by the given explanation feature rankings.
+
+    Args:
+        indices (torch.Tensor): Tensor of shape (batch_size, num_features) containing the feature rankings for each sample in the batch.
+        fraction (float): Fraction of the important features to mask.
+        H (int): Height of the input image.
+        W (int): Width of the input image.
+    Returns:
+        torch.Tensor: Tensor of shape (batch_size, H, W) containing the binary masks.
     """
     bs = indices.shape[0]
     total = indices.shape[1]
@@ -30,7 +36,15 @@ def create_masks(indices, fraction, H=IMG_SIZE, W=IMG_SIZE):
     return masks.reshape(bs, H, W)
 
 def batched_AUC(fractions, batched_scores):
-    """ Helper function to compute feature deletion/insertion AUC for a batch of model confidence scores. """
+    """
+    Helper function to compute feature deletion/insertion AUC for a batch of model confidence scores.
+
+    Args:
+        fractions (torch.Tensor): Tensor of shape (num_ratios,) containing the perturbation ratios.
+        batched_scores (np.ndarray): Array of shape (num_ratios, batch_size) containing the model confidence scores for each sample in the batch.
+    Returns:
+        np.ndarray: Array of shape (batch_size,) containing the AUC for each sample in the batch.
+    """
     all_aucs = []
     n_samples = batched_scores.shape[1]
     for i in range(n_samples):
@@ -41,6 +55,14 @@ def perturbation_curve(model, images, targets, feature_importance, mode='deletio
     """
     Computes model confidence scores while varying the number of important pixels for a batch of input images.
     The important pixels are based on the results of a model explainer method (e.g., GradCAM, Integrated Gradients, LIME, etc).
+
+    Args:
+        model (torch.nn.Module): Pre-trained model to evaluate.
+        images (torch.Tensor): Tensor of shape (batch_size, channels, height, width) containing the input images.
+        targets (torch.Tensor): Tensor of shape (batch_size,) containing the true labels for each image.
+        feature_importance (torch.Tensor): Tensor of shape (batch_size, height, width) containing the feature importance scores for each image.
+        mode (str): Either 'deletion' or 'insertion' to specify the type of perturbation.
+        fractions (torch.Tensor): Tensor of shape (num_ratios,) containing the perturbation ratios.
     """
     H, W = feature_importance.shape[-2:]
     
@@ -50,7 +72,7 @@ def perturbation_curve(model, images, targets, feature_importance, mode='deletio
 
     # # Alternate: Baselines using transformed versions of each image in the batch
     # baselines = TF.gaussian_blur(img=images, kernel_size=21, sigma=0.5)
-    # baselines = TF.adjust_brightness(img=baselines, brightness_factor=0.3)
+    # baselines = TF.adjust_brightness(img=ins_baselines, brightness_factor=0.3)
 
     # Mean baseline
     baselines = torch.tensor(CIFAR10_MEAN, device=Device).view(3, 1, 1).expand_as(images)
@@ -85,7 +107,17 @@ def pipeline(model_ckpt,
              explanations_pth="./explanations",
              perturbation_scores_pth="./perturbation_scores",
              methods=list(XAI_METHODS.keys())):
-    """ TODO: add description. """
+    """
+    Runs the perturbation pipeline for each XAI method and saves the results to disk.
+
+    Args:
+        model_ckpt (str): Path to the pre-trained model checkpoint.
+        data_idx (str): Path to the file containing the indices of correctly predicted samples.
+        ratios (torch.Tensor): Tensor of shape (num_ratios,) containing the perturbation ratios.
+        explanations_pth (str): Path to the directory containing the explanation maps.
+        perturbation_scores_pth (str): Path to the directory where perturbation scores will be saved.
+        methods (list): List of XAI methods for which to run the perturbation pipeline.
+    """
     print("Running Perturbation Pipeline for each XAI method...")
     # Instantiate model
     model = load_model(model_ckpt=model_ckpt)
@@ -170,7 +202,15 @@ def pipeline(model_ckpt,
         np.save(f"{save_path}/insertion_confidence.npy", avg_ins_confidence)
 
 def visualize_perturbations(img, mask, ratio=0.3, mode='deletion'):
-    """ Function to visualize example images side-by-side with their perturbed versions. """
+    """
+    Helper function to visualize example images side-by-side with their perturbed versions.
+
+    Args:
+        img (torch.Tensor): Tensor of shape (1, channels, height, width) containing the input image.
+        mask (torch.Tensor): Tensor of shape (1, 1, height, width) containing the binary mask for the important features.
+        ratio (float): Fraction of the important features that were perturbed.
+        mode (str): Either 'deletion' or 'insertion' to specify the type of perturbation.
+    """
     baseline = TF.gaussian_blur(img=img, kernel_size=21, sigma=2.5)
     baseline = TF.adjust_brightness(img=baseline, brightness_factor=0.3)
 

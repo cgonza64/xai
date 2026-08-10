@@ -9,7 +9,7 @@ import numpy as np
 import torch
 import cv2
 from torchvision.datasets import CIFAR10
-from torchvision.models import resnet18
+from torch.utils.data import Subset
 
 # GradCAM
 from pytorch_grad_cam import GradCAM
@@ -60,23 +60,39 @@ class GradCamXai(XaiMethodBase):
     def visualize(self, input_tensor, grayscale_cam, target_class, show=True, save_path=None):
         """
         Visualize the Grad-CAM heatmap on the input image.
+
+        Args:
+            input_tensor: The original input image tensor.
+            grayscale_cam: The Grad-CAM heatmap for the input image.
+            target_class: The class label for which the explanation is generated.
+            show: Whether to display the visualization.
+            save_path: Path to save the visualization image. If None, the image is not saved.
         """
         # Visualize
         inp = tensor2image(input_tensor)
         visualization = show_cam_on_image(inp, grayscale_cam, use_rgb=True)
         _, ax = plt.subplots(1, 1)
         ax.imshow(visualization)
-        ax.set_title(f'GradCAM Output - Target Class: {target_class}')
-        if show:
-            plt.show()
+        ax.set_title(f'GradCAM - Target Class: {target_class}')
+        ax.axis("off")
 
         # Save image to file
         if save_path is not None:
             cv2.imwrite(save_path, cv2.cvtColor(visualization, cv2.COLOR_RGB2BGR))
 
+        if show:
+            plt.show()
+
+        plt.close()
+
     def importance_maps(self, explanations):
         """
         Convert Grad-CAM heatmaps to pixel importance maps.
+
+        Args:
+            explanations: A numpy array of Grad-CAM heatmaps for each input image.
+        Returns:
+            A numpy array of pixel importance maps for each input image.
         """
         return explanations  # GradCAM already produces importance mappings that are normalized in [0, 1]
 
@@ -94,7 +110,9 @@ if __name__ == "__main__":
     # Load CIFAR10 dataset
     transform = data_transforms
     test_dataset = CIFAR10(root='./data', train=False, download=False, transform=transform)
-    test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=4, shuffle=False)
+    # test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=4, shuffle=False)
+    subset = Subset(test_dataset, list(range(10)))
+    test_loader = torch.utils.data.DataLoader(subset, batch_size=128, shuffle=False)
 
     # Generate explanations for the test dataset
     explanations = grad_cam.explain(test_loader)
