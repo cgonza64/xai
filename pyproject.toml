@@ -18,7 +18,8 @@ dependencies = [
     "lime",
     "einops",
     "tqdm",
-    "jupyter"
+    "jupyter",
+    "fvcore"
 ]
 
 [[tool.uv.index]]
