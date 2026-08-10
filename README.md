@@ -107,17 +107,6 @@ python metrics.py
 
 ---
 
-## Additional Python Files
-
-* **Visualizations.py** - Implements various helper functions for displaying/saving qualitative examples used for the project report.
-* **GradCamXai.py** - Generates explanations, visualizations, and feature importance mappings for GradCAM.
-* **IntegratedGradientsXai.py** - Generates explanations, visualizations, and feature importance mappings for Integrated Gradients.
-* **LimeXai.py** - Generates explanations, visualizations, and feature importance mappings for LIME.
-* **XaiMethodBase.py** - Base class for a generic XAI method. I.e., the above three files inherit from this class.
-
-
----
-
 ## Summary of Steps
 
 - **Step 1: Run Training**  
@@ -133,3 +122,13 @@ python metrics.py
   Execute `metrics.py` to total mean AUC scores for each XAI method along with various other metrics..
 
 Happy Explaining!
+
+---
+
+## Additional Python Files
+
+* **Visualizations.py** - Implements various helper functions for displaying/saving qualitative examples used for the project report.
+* **GradCamXai.py** - Generates explanations, visualizations, and feature importance mappings for GradCAM.
+* **IntegratedGradientsXai.py** - Generates explanations, visualizations, and feature importance mappings for Integrated Gradients.
+* **LimeXai.py** - Generates explanations, visualizations, and feature importance mappings for LIME.
+* **XaiMethodBase.py** - Base class for a generic XAI method. I.e., the above three files inherit from this class.
