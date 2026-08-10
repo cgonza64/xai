@@ -59,22 +59,23 @@ class IntegratedGradientsXai(XaiMethodBase):
                 deltas.append(delta)
         # Single input explanation
         elif isinstance(input_data, torch.Tensor):
-            assert labels is not None, "Labels must be provided when input_data is a Tensor."
-            baseline = torch.zeros_like(input_data).to(self.device)
-            img = input_data.to(self.device)
-            with torch.no_grad():
-                logits = self.model(img)
-                pred_class = logits.argmax(dim=1)   # shape [B]
+            batch_size = 2  # IG uses lots of VRAM
+            for idx in tqdm(np.arange(0, input_data.size(0), step=batch_size)):
+                img = input_data[idx : idx + batch_size].to(self.device)
+                baseline = torch.zeros_like(img).to(self.device)
+                with torch.no_grad():
+                    logits = self.model(img)
+                    pred_class = logits.argmax(dim=1)   # shape [B]
 
-            attributions, delta = ig.attribute(
-                inputs=img,
-                baselines=baseline,
-                target=pred_class,
-                n_steps=50,
-                return_convergence_delta=True
-            )
-            explanations.append(attributions)
-            deltas.append(delta)
+                attributions, delta = ig.attribute(
+                    inputs=img,
+                    baselines=baseline,
+                    target=pred_class,
+                    n_steps=50,
+                    return_convergence_delta=True
+                )
+                explanations.append(attributions)
+                deltas.append(delta)
         else:
             raise ValueError("Input data must be a DataLoader or a Tensor.")
 
@@ -86,7 +87,14 @@ class IntegratedGradientsXai(XaiMethodBase):
     # Undo normalization for display
     @staticmethod
     def unnormalize(img_tensor):
-        """ Helper function to undo normalization for display. """
+        """
+        Helper function to undo normalization for display.
+
+        Args:
+            img_tensor: A tensor of shape [1, 3, H, W] representing a normalized image.
+        Returns:
+            A numpy array representing the unnormalized image.
+        """
         img = img_tensor.squeeze(0).cpu().clone()
         for c in range(3):
             img[c] = img[c] * CIFAR10_STD[c] + CIFAR10_MEAN[c]
@@ -96,9 +104,15 @@ class IntegratedGradientsXai(XaiMethodBase):
     def visualize(self, input_tensor, attributions, target_class, show=True, save_path=None):
         """
         Visualize the Integrated Gradients heatmap on the input image.
+
+        Args:
+            input_tensor: The original input image tensor.
+            attributions: The Integrated Gradients attributions for the input image.
+            target_class: The class label for which the explanation is generated.
+            show: Whether to display the visualization.
+            save_path: Path to save the visualization image. If None, the image is not saved
         """
         # Convert attribution to grayscale heatmap
-        # attr = attributions.detach().cpu().numpy()  # shape=[3, 224, 224]
         attr = np.transpose(attributions, (1, 2, 0))  # shape=[224, 224, 3]
         attr_sum = np.sum(np.abs(attr), axis=2)  # shape=[224, 224, 1]
 
@@ -118,9 +132,16 @@ class IntegratedGradientsXai(XaiMethodBase):
             plt.tight_layout()
             plt.show()
 
+        plt.close()
+
     def importance_maps(self, explanations):
         """
         Convert Integrated Gradients explanations to pixel importance maps.
+
+        Args:
+            explanations: A numpy array of Integrated Gradients attributions for each input image.
+        Returns:
+            A numpy array of pixel importance maps for each input image.
         """
         # Convert signed attributions to scalar importance
         importance = np.abs(explanations).sum(axis=1)
@@ -141,7 +162,6 @@ if __name__ == "__main__":
     test_dataset = CIFAR10(root='./data', train=False, download=False, transform=data_transforms)
     subset = Subset(test_dataset, list(range(10)))
     test_loader = torch.utils.data.DataLoader(subset, batch_size=2, shuffle=False)
-    # test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=2, shuffle=False)
 
     # Generate explanations for the test dataset
     explanations = ig.explain(test_loader)
