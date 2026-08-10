@@ -2,22 +2,58 @@ from sklearn.metrics import auc
 import matplotlib.pyplot as plt
 import matplotlib as mpl
 import numpy as np
+import torch
 import os
+import psutil
 from scipy import stats
 from scipy.stats import f_oneway
 from statsmodels.stats.multicomp import pairwise_tukeyhsd
 from torchvision.datasets import CIFAR10
-from utils import load_data_samples
+from fvcore.nn import FlopCountAnalysis
+from tqdm import tqdm
+from functools import partial
+from utils import load_data_samples, load_model, IMG_SIZE
 from explanations import XAI_METHODS, NUMBER_OF_ITERATIONS
 from perturbation_pipeline import PERTURBATION_RATIOS
 
+Device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+def average_AUC_scores(perturbation_scores_pth="./perturbation_scores", methods=list(XAI_METHODS.keys())):
+    """
+    Computes the average Deletion/Insertion AUC scores for each XAI method and prints the results. 
+    
+    Args:
+        perturbation_scores_pth (str): Path to the directory containing the perturbation scores.
+        methods (list): List of XAI methods for which to compute average AUC scores.
+    """
+    print("\n--- Average Deletion/Insertion AUC ---")
+    for m in methods:
+        print(f"\n{m}:")
+        scores_path = f"{perturbation_scores_pth}/{m}"
+        deletion_auc = np.load(f"{scores_path}/feature_deletion_auc.npy")
+        insertion_auc = np.load(f"{scores_path}/feature_insertion_auc.npy")
+
+        # Average per-instance AUC over each iteration before computing total average AUC
+        avg_del_scores = np.mean(deletion_auc, axis=0)        
+        print(f"Avg Feature Deletion AUC={np.mean(avg_del_scores):.3f} {chr(177)}{np.std(avg_del_scores):.4f}")
+        avg_ins_scores = np.mean(insertion_auc, axis=0)
+        print(f"Avg Feature Insertion AUC={np.mean(avg_ins_scores):.3f} {chr(177)}{np.std(avg_ins_scores):.4f}")
+
 def plot_avg_confidence_scores(scores, ratios=PERTURBATION_RATIOS, **config):
+    """
+    Helper function to plot the average model confidence scores vs. perturbation ratios for each XAI method. 
+    
+    Args:
+        scores (dict): Dictionary containing the average model confidence scores for each XAI method.
+        ratios (list): List of perturbation ratios.
+        **config: Additional plotting configuration options.
+    """
     # Parse plotting configuration
     mode = config.get('mode', "Deletion")
     save_path = config.get('save_path', None)
     save_only = config.get('save_only', False)
 
-    fig, ax = plt.subplots(figsize=(8,5))
+    fig, ax = plt.subplots(figsize=(10,5))
     colors = mpl.color_sequences['tab10']
     # colors = mpl.color_sequences['Dark2']
     # colors = mpl.color_sequences['Pastel1']
@@ -30,8 +66,9 @@ def plot_avg_confidence_scores(scores, ratios=PERTURBATION_RATIOS, **config):
         ax.fill_between(x, scores[m], color=colors[i], alpha=0.2)  # alpha controls transparency
         # ax.fill_between(x, scores[m], facecolor="none", edgecolor=colors[0], hatch=hatches[i], alpha=0.1)
 
-    plt.title(f"Feature {mode}", fontsize=18)
-    plt.xlabel(f"Perturbation ratio (%)", fontsize=16)
+    plt.title(f"Model Confidence (Feature {mode})", fontsize=18)
+    xlabel = "Deletion ratio (%)" if mode == "Deletion" else "Insertion ratio (%)"
+    plt.xlabel(xlabel, fontsize=16)
     plt.xticks(fontsize=14)
     plt.ylabel("Avg Confidence", fontsize=16)
     plt.yticks(fontsize=14)
@@ -48,22 +85,14 @@ def plot_avg_confidence_scores(scores, ratios=PERTURBATION_RATIOS, **config):
     
     plt.show()
 
-def average_AUC_scores(perturbation_scores_pth="./perturbation_scores", methods=list(XAI_METHODS.keys())):
-    # Compute feature perturbation scores for each XAI method
-    print("\n--- Average Deletion/Insertion AUC ---")
-    for m in methods:
-        print(f"\n{m}:")
-        scores_path = f"{perturbation_scores_pth}/{m}"
-        deletion_auc = np.load(f"{scores_path}/feature_deletion_auc.npy")
-        insertion_auc = np.load(f"{scores_path}/feature_insertion_auc.npy")
-
-        # Average per-instance AUC over each iteration before computing total average AUC
-        avg_del_scores = np.mean(deletion_auc, axis=0)        
-        print(f"Avg Feature Deletion AUC={np.mean(avg_del_scores):.3f} {chr(177)}{np.std(avg_del_scores):.4f}")
-        avg_ins_scores = np.mean(insertion_auc, axis=0)
-        print(f"Avg Feature Insertion AUC={np.mean(avg_ins_scores):.3f} {chr(177)}{np.std(avg_ins_scores):.4f}")
-
 def average_confidence_scores(perturbation_scores_pth="./perturbation_scores", methods=list(XAI_METHODS.keys())):
+    """
+    Computes the average model confidence scores vs. perturbation ratios for each XAI method and plots the results.
+    
+    Args:
+        perturbation_scores_pth (str): Path to the directory containing the perturbation scores.
+        methods (list): List of XAI methods for which to compute average confidence scores.
+    """
     print("\n--- Average model confidence vs. perturbation ratios ---")
     avg_del_confidence = {m: None for m in methods}
     avg_ins_confidence = {m: None for m in methods}
@@ -76,13 +105,21 @@ def average_confidence_scores(perturbation_scores_pth="./perturbation_scores", m
         avg_ins_confidence[m] = np.mean(ins_confidence, axis=0)
 
     # Plot the average confidence scores vs perturbation ratios
+    print('Generating plots...')
     plot_avg_confidence_scores(avg_del_confidence, mode='Deletion')
     plot_avg_confidence_scores(avg_ins_confidence, mode='Insertion')
 
 def explanation_latency(explanations_path="./explanations",
                         methods=list(XAI_METHODS.keys()),
                         correct_indices_pth="./ckpts/correct_preds_indices.npy"):
-    """ TODO: add description. """
+    """
+    Computes the average explanation latency for each XAI method. 
+    
+    Args:
+        explanations_path (str): Path to the directory containing the generated explanations.
+        methods (list): List of XAI methods for which to compute average explanation latency.
+        correct_indices_pth (str): Path to the file containing the indices of correctly predicted samples.
+    """
     print("\n--- Average Explanation Latency ---")
     correct_pred_idx = np.load(correct_indices_pth)
     N = len(correct_pred_idx)
@@ -93,10 +130,101 @@ def explanation_latency(explanations_path="./explanations",
         print(f"Latency = {1e3 * avg_duration_per_sample:.2f} ms per image sample")
         print(f"Throughput = {1/avg_duration_per_sample:.2f} images/sec")
 
+def peak_vram():
+    """ Computes the peak VRAM usage for each XAI method. """
+    print("\n--- Peak VRAM ---")
+
+    # Load the pre-trained model
+    model = load_model(model_ckpt="ckpts/rn18_cifar10.ckpt")
+
+    # Define the target layer for Grad-CAM
+    target_layers = [model.layer4[-1]]  # Last layer of the last block in ResNet18
+
+    # Compute max VRAM usage for each XAI method
+    for name, config in XAI_METHODS.items():
+        # Force tqdm to stop rendering for every LIME explanation
+        tqdm.__init__ = partial(tqdm.__init__, disable=True)
+
+        if name == 'GradCAM':
+            explainer = config['ctor'](model, target_layers=target_layers)
+        else:
+            explainer = config['ctor'](model)
+
+        dummy_image = np.random.randn(1, IMG_SIZE, IMG_SIZE, 3) if name == "LIME" else torch.randn(1, 3, IMG_SIZE, IMG_SIZE)
+
+        torch.cuda.reset_peak_memory_stats()
+        before = torch.cuda.memory_allocated()
+        explanation = explainer.explain(dummy_image, labels=torch.tensor([3]))  # Assuming label 3 for cat (doesn't matter)
+        peak = torch.cuda.max_memory_allocated()
+        additional_vram = (peak - before) / (1024 ** 3)
+        print(f"\n{name}: {additional_vram:.3f} GB")
+
+def ram_usage():
+    """ Computes the CPU memory usage for each XAI method. """
+    print("\n--- Memory Usage ---")
+
+    # Load the pre-trained model
+    model = load_model(model_ckpt="ckpts/rn18_cifar10.ckpt")
+
+    # Define the target layer for Grad-CAM
+    target_layers = [model.layer4[-1]]  # Last layer of the last block in ResNet18
+
+    # Compute max VRAM usage for each XAI method
+    for name, config in XAI_METHODS.items():
+        # Force tqdm to stop rendering for every LIME explanation
+        tqdm.__init__ = partial(tqdm.__init__, disable=True)
+
+        if name == 'GradCAM':
+            explainer = config['ctor'](model, target_layers=target_layers)
+        else:
+            explainer = config['ctor'](model)
+
+        dummy_image = np.random.randn(1, IMG_SIZE, IMG_SIZE, 3) if name == "LIME" else torch.randn(1, 3, IMG_SIZE, IMG_SIZE)
+
+        process = psutil.Process(os.getpid())
+        before = process.memory_info().rss
+        explanation = explainer.explain(dummy_image, labels=torch.tensor([3]))  # Assuming label 3 for cat (doesn't matter)
+        after = process.memory_info().rss
+        ram_used = (after - before) / (1024 ** 2)
+        print(f"\n{name}: {ram_used:.2f} MB")
+
+def estimate_gflops():
+    """ 
+    Estimates the GFLOPS for each XAI method. The GFLOPS for the backward pass is
+    estimated as 2x the GFLOPS for the forward pass.
+    """
+    print("\n--- Average FLOPS ---")
+
+    # Forward/Backward pass counts for each XAI method
+    # (taken from each method's default configuration in their respective Python class modules)
+    n_fwd_bwd_passes = {"GradCAM": (1, 1), "IntegratedGradients": (50, 50), "LIME": (500, 0)}
+
+    # Measure GFLOPS for a model forward pass
+    dummy_img = torch.randn(1, 3, 224, 224, device=Device)
+    model = load_model(model_ckpt="ckpts/rn18_cifar10.ckpt")
+    model.to(Device)
+    flops = FlopCountAnalysis(model, dummy_img)
+    F_forward = flops.total() / 1e9  # GFLOPS
+    F_backward = 2 * F_forward  # standard estimation
+    print(f"Forward GFLOPs: {F_forward:.3f}, Backward GFLOPs: {F_backward:.3f}\n")
+
+    # Calculate GFLOPS for each XAI method
+    for m, counts in n_fwd_bwd_passes.items():
+        N_fwd, N_bwd = counts
+        gflops = N_fwd * F_forward + N_bwd * N_bwd * F_backward
+        print(f"{m}: {gflops:.3f} GFLOPS")
+
 def plot_metrics_by_class(_metrics, _class_labels, _mode='Deletion'):
-    """ Helper function to plot Average Deletion/Insertion AUC by class label and for each XAI method. """
+    """
+    Helper function to plot Average Deletion/Insertion AUC by class label and for each XAI method.
+    
+    Args:
+        _metrics (dict): Dictionary containing the average AUC scores for each XAI method and class label.
+        _class_labels (list): List of class labels.
+        _mode (str): Mode of perturbation, either 'Deletion' or 'Insertion'.
+    """
     # Bar Plot of the metrics
-    fig, ax = plt.subplots(figsize=(15, 4))
+    fig, ax = plt.subplots(figsize=(15, 5))
     x = np.arange(1, len(_class_labels)+1)
     width = 0.25
     offset = -0.5
@@ -107,41 +235,55 @@ def plot_metrics_by_class(_metrics, _class_labels, _mode='Deletion'):
         offset += 1.0
     ax.set_xticks(x)
     ax.set_xticklabels(_class_labels)
-    plt.title(f'Metrics by class (Feature {_mode})')
-    plt.xlabel('Class')
-    plt.ylabel(f'AUC')
-    plt.legend(loc='upper left')
+    plt.xticks(fontsize=14)
+    plt.yticks(fontsize=14)
+    plt.title(f'Feature {_mode} AUC by class', fontsize=18)
+    plt.xlabel('Class', fontsize=16)
+    plt.ylabel(f'AUC', fontsize=16)
+    plt.legend(loc='upper right')
     plt.show()
 
 def correct_preds_barplot(_correct_preds, _class_labels):
+    """
+    Plots a bar chart of the counts of correctly predicted samples for each class. 
+    
+    Args:
+        _correct_preds (list): List of class indices for the correctly predicted samples.
+        _class_labels (list): List of class labels.
+    """
     class_counts = np.unique(_correct_preds, return_counts=True)[1]
     print('Correct Prediction Counts:')
     for c, count in zip(_class_labels, class_counts):
-        print(f"{c}: {class_counts}")
+        print(f"{c}: {count}")
     fig, ax = plt.subplots()
     x = np.arange(1, len(_class_labels)+1)
     ax.bar(x, height=class_counts)
     ax.set_xticks(x)
     ax.set_xticklabels(_class_labels)
-    plt.xticks(rotation=45)
-    plt.title('Correctly Predicted Class Counts')
-    plt.xlabel('Class')
-    plt.ylabel(f'# correct')
+    plt.xticks(fontsize=12, rotation=45)
+    plt.yticks(fontsize=12)
+    plt.title('Correctly Predicted Class Counts', fontsize=16)
+    plt.xlabel('Class', fontsize=14)
+    plt.ylabel(f'# correct', fontsize=14)
     plt.show()
 
-def auc_by_classes(perturbation_scores_pth="./perturbation_scores", methods=list(XAI_METHODS.keys())):
-    """ TODO: add description. """
+def auc_by_classes(perturbation_scores_pth="./perturbation_scores",
+                   methods=list(XAI_METHODS.keys())):
+    """
+    Computes and plots the Average Deletion/Insertion AUC by class label for each XAI method.
+
+    Args:
+        perturbation_scores_pth (str): Path to the directory containing the perturbation scores.
+        methods (list): List of XAI methods for which to compute average AUC.
+    """
     print("\n--- Deletion/Insertion AUC by Classes ---")
 
     # Load the dataset class names and the correctly predicted test samples
     test_dataset = CIFAR10(root='data', train=False)
     class_labels = test_dataset.classes
     correct_samples = load_data_samples()
+    
     y_correct = [_[1] for _ in correct_samples.dataset]
-
-    # DELETEME - sanity check
-    # ground_truth = [_[1] for _ in test_dataset]
-    # correct_preds_barplot(ground_truth, class_labels)
 
     # Visualize how the model performed for each class
     correct_preds_barplot(y_correct, class_labels)
@@ -165,46 +307,14 @@ def auc_by_classes(perturbation_scores_pth="./perturbation_scores", methods=list
     for mode in metrics_by_class.keys():
         plot_metrics_by_class(metrics_by_class[mode], class_labels, mode)
 
-
-# def get_metrics_by_class(_embeds1, _embeds2, _all_labels, _k=5, _debug=False):
-#     """ Helper function to compute mAP@k, recall@k, and precision@k for each 
-#         of the target classes.
-#     """
-#     labels = [int(l.item()) for l in _all_labels]
-#     metrics_by_class = {c: {} for c in tgt_classes}
-#     for i, c in enumerate(tgt_classes):
-#         class_embeds1 = [aud_emb.unsqueeze(0) for aud_emb, label in zip(_embeds1, _all_labels) if int(label.item()) == i]
-#         class_embeds1 = torch.cat(class_embeds1, dim=0)
-        
-#         # construct relevance ranks
-#         relevance = torch.zeros(_all_labels.size(0), device=_all_labels.device)
-#         mask = (_all_labels == i)
-#         idx = torch.nonzero(mask, as_tuple=True)[0].tolist()
-#         relevance[idx] = 1
-#         relevance = repeat(relevance.unsqueeze(0), '1 d -> b d', b=len(class_embeds1))
-    
-#         # metrics by class
-#         mAP = map_at_k(class_embeds1, _embeds2, relevance, k=_k)
-#         recall = recall_at_k(class_embeds1, _embeds2, relevance, k=_k)
-#         precision = precision_at_k(class_embeds1, _embeds2, relevance, k=_k)
-#         scores = {f'mAP@{_k}': mAP, f'recall@{_k}': recall, f'precision@{_k}': precision}
-#         metrics_by_class[c] = scores
-
-#         if _debug:
-#             print(f'{c}: mAP@{_k}={mAP}, recall@{_k}={recall}, precision@{_k}={precision}')
-
-#     return metrics_by_class
-
 def statistical_significance(perturbation_scores_pth="./perturbation_scores", methods=list(XAI_METHODS.keys()), alpha=0.05):
     """
-    TODO: add description
+    Determines the statistical significance of the Average Deletion/Insertion AUC results.
 
     Args:
-        test_results_path (str): path to the directory containing the test results
-        agent_types (list): list of agent types (e.g., ['SARSA', 'QLearning', 'SARSA_Lambda', 'DQN'])
-        alpha (float): significance level for the statistical tests
-    Returns:
-        None
+        perturbation_scores_pth (str): Path to the directory containing the perturbation scores.
+        methods (list): List of XAI methods for which to compute average AUC.
+        alpha (float): Significance level for the statistical tests.
     """
     deletion_auc = {m: np.load(f"{perturbation_scores_pth}/{m}/feature_deletion_auc.npy") for m in methods}
     insertion_auc = {m: np.load(f"{perturbation_scores_pth}/{m}/feature_insertion_auc.npy") for m in methods}
@@ -253,8 +363,16 @@ def statistical_significance(perturbation_scores_pth="./perturbation_scores", me
         print(tukey)
 
 if __name__=='__main__':
-    # average_AUC_scores()
-    # average_confidence_scores()
-    # explanation_latency()
+    # computational efficiency
+    ram_usage()
+    estimate_gflops()
+    peak_vram()
+    explanation_latency()
+
+    # Main AUC metrics
+    average_AUC_scores()
+    average_confidence_scores()
     auc_by_classes()
-    # statistical_significance()
+
+    # statistical significance
+    statistical_significance()
