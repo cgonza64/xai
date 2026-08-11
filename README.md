@@ -60,7 +60,7 @@ The training configuration is defined at the top of the `model_training.py` file
 - learning rate
 - number of output classes
 - number of epochs
-- The path where the saved model wiehgts are stored.
+- The path where the saved model weights are stored.
 
 #### Step 1: Run the training
 
@@ -90,7 +90,7 @@ python explanations.py
 
 ## Perturbation Pipeline
 
-Execute the `perturbation_pipeline.py` file to run the perturbation pipeline. This will perform feature deletion/insertion while saving AUC scores for each correctly predicted test image sample. Additionally, model confidences for each sample and each perturbation ratio are also save.
+Execute the `perturbation_pipeline.py` file to run the perturbation pipeline. This will perform feature deletion/insertion while saving AUC scores for each correctly predicted test image sample. Additionally, model confidences for each sample and each perturbation ratio are also saved.
 
 ```python
 python perturbation_pipeline.py
@@ -117,10 +117,10 @@ python metrics.py
   Execute `explanations.py` to generate explanations for each XAI method and save the feature importance maps to a disk drive.
 
 - **Step 3: Run the Perturbation Pipeline**
-  Execute `perturbation_pipeline.py` to perform feature deletion/insertion guided by the collected feature importance maps. Additionally, compute and save model confidence AUC scores.
+  Execute `perturbation_pipeline.py` to perform feature deletion/insertion guided by the collected feature importance maps. Additionally, this will compute and save model confidence AUC scores.
 
 - **Step 4: Metrics**
-  Execute `metrics.py` to total mean AUC scores for each XAI method along with various other metrics..
+  Execute `metrics.py` to total mean AUC scores for each XAI method along with various other metrics.
 
 Happy Explaining!
 
