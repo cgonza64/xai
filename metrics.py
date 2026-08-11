@@ -211,7 +211,7 @@ def estimate_gflops():
     # Calculate GFLOPS for each XAI method
     for m, counts in n_fwd_bwd_passes.items():
         N_fwd, N_bwd = counts
-        gflops = N_fwd * F_forward + N_bwd * N_bwd * F_backward
+        gflops = N_fwd * F_forward + N_bwd * F_backward
         print(f"{m}: {gflops:.3f} GFLOPS")
 
 def plot_metrics_by_class(_metrics, _class_labels, _mode='Deletion'):
