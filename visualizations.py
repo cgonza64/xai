@@ -216,7 +216,7 @@ def visual_comparison(idx=[2, 3, 4, 6, 8, 9, 10, 11, 16, 17, 22, 25], img_dir=".
                        save_path=f"{save_path}/img_{i}_comparison.png")
 
 if __name__=='__main__':
-    number_of_samples = 30
+    number_of_samples = 5
 
     # Display some of the correct predictions from the CIFAR-10 test dataset
     correct_image_samples(n_samples=number_of_samples)
@@ -224,7 +224,7 @@ if __name__=='__main__':
     # Generate samples explanations for visual comparison
     visualize_sample_explanations(n_samples=number_of_samples,
                                   model_ckpt="ckpts/rn18_cifar10.ckpt",
-                                  show=False)
+                                  show=True)
 
     # Model Confidences
     print_model_confidence(n_samples=number_of_samples)
