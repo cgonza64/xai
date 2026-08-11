@@ -60,7 +60,7 @@ The training configuration is defined at the top of the `model_training.py` file
 - learning rate
 - number of output classes
 - number of epochs
-- The path where the saved model weights are stored.
+- The path where the model weights are saved.
 
 #### Step 1: Run the training
 
