@@ -74,11 +74,11 @@ python model_training.py
 
 ## Collecting the Explanations
 
-### Duration Considerations
+#### Duration Considerations
 
 For statistical analysis testing, a total of 5 explanation collection iterations are performed. This can be adjusted by modifying the **NUMBER_OF_ITERATIONS** variable at the top of `explanations.py`. Additionally, note that collecting LIME explanations can be slow since each explanation is computed sequentially. Thus, even with setting **NUMBER_OF_ITERATIONS** to 1, collecting all explanations can still take several hours.
 
-### Step 2: Generate explanations and store feature importance maps
+#### Step 2: Generate explanations and store feature importance maps
 
 Execute the `explanations.py` file, which will collect explanations for each XAI method and store feature importance maps to a local disk drive.
 
@@ -90,6 +90,8 @@ python explanations.py
 
 ## Perturbation Pipeline
 
+#### Step 3: Perform feature deletion and feature insertion
+
 Execute the `perturbation_pipeline.py` file to run the perturbation pipeline. This will perform feature deletion/insertion while saving AUC scores for each correctly predicted test image sample. Additionally, model confidences for each sample and each perturbation ratio are also saved.
 
 ```python
@@ -99,6 +101,8 @@ python perturbation_pipeline.py
 ---
 
 ## Metrics
+
+#### Step 4: Collect total mean AUC scores and other metrics
 
 Execute the `metrics.py` file to compute total mean AUC scores for feature deletion/insertion along with various other metrics for each XAI method like average explanation latency, explanation throughput, and peak VRAM usage. Additionally, the ANOVA and Tukey HSD tests are executed on the AUC scores to determine their statistical significance.
 
