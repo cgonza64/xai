@@ -23,10 +23,13 @@ This project evaluates explanation fidelity for GradCAM, Integrated Gradients, a
 
 ## Environment Setup
 
-1. **Python Version:**  
+1. **Git LFS:**  
+The model checkpoints under `ckpts/` are stored with [Git LFS](https://git-lfs.com). Install Git LFS (version 3.6 or newer recommended) and run `git lfs install` once before cloning. If you already cloned without it, run `git lfs pull` to download the real checkpoint files.
+
+2. **Python Version:**  
 This project requires Python 3.14 or higher.
 
-2. **Dependencies:**  
+3. **Dependencies:**  
 Either uv or pip can be used to install the required Python packages:
 
 ```bash
