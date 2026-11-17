@@ -1,6 +1,6 @@
 # Evaluating XAI Faithfulness for GradCAM, Integrated Gradients, and LIME
 
-This project evaluates explanation fidelity for GradCAM, Integrated Gradients, and LIME. A perturbation pipeline is used to perform feature deletion and feature insertion to compute total mean AUC scores. These scores are measures of overall explanation fidelity for each of the XAI methods. The explanations are collected for a ResNet-18 model where inputs are a subset of correctly predicted images from the CIFAR-10 test dataset. The project includes Python files for training the model on CIFAR-10, collecting explanations for each XAI method, and executing the perturbation pipeline to perform feature deletion/insertion. An additional Python file is provided to compute total mean AUC scores along with various other metrics.
+This project evaluates explanation fidelity for GradCAM, Integrated Gradients, and LIME. A perturbation pipeline is used to perform feature deletion and feature insertion to compute total mean AUC scores. These scores are measures of overall explanation fidelity for each of the XAI methods. The explanations are collected for a ResNet-18 model where inputs are a subset of correctly predicted images from the CIFAR-10 test dataset. The project includes Python files for training the model on CIFAR-10, collecting explanations for each XAI method, and executing the perturbation pipeline to perform feature deletion/insertion. An additional Python file is provided to compute total mean AUC scores along with various other metrics. [Read the paper](docs/xai-faithfulness-final-report.pdf).
 
 ---
 
@@ -12,6 +12,12 @@ This project evaluates explanation fidelity for GradCAM, Integrated Gradients, a
 - [Collecting the Explanations](#collecting-the-explanations)
 - [Perturbation Pipeline](#perturbation-pipeline)
 - [Metrics](#metrics)
+
+---
+
+## Sample explanations on a cat image from CIFAR-10
+
+![Explanation Samples](docs/pics/explanation_samples.png)
 
 ---
 
